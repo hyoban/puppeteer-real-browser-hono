@@ -83,10 +83,7 @@ async function fetchSingleUrl(
   const page = await browser.newPage();
   await blocker.enableBlockingInPage(page as any);
   try {
-    await page.goto(url, {
-      timeout: 0,
-      ...goToOptions,
-    });
+    await page.goto(url, goToOptions);
 
     if (selector) {
       const startDate = Date.now();
