@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { getPageContent } from "./lib.js";
+import { responseCache } from "./cache.js";
 
 const app = new Hono();
 
@@ -13,10 +14,19 @@ app.get("/", async (c) => {
       return c.json({ error: "URL parameter is required" }, 400);
     }
 
-    const result = await getPageContent({ url, ...options });
+    let result = responseCache.get(url, options);
+    let fromCache = false;
+
+    if (result) {
+      fromCache = true;
+    } else {
+      result = await getPageContent({ url, ...options });
+      responseCache.set(url, options, result);
+    }
 
     return c.json({
       success: true,
+      fromCache,
       data: result,
     });
   } catch (error) {
