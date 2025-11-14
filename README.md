@@ -7,10 +7,13 @@ A web scraping API service built with [Hono](https://hono.dev/) and [puppeteer-r
 - 🚀 Fast and lightweight API built with Hono framework
 - 🌐 Real browser automation using puppeteer-real-browser
 - 🔄 Support for multiple URLs in a single request
-- 🎯 CSS selector-based content waiting
-- 🐳 Docker support for easy deployment
+- 🎯 CSS selector-based content waiting for specific elements
+- 🛡️ Built-in ad blocking (using @ghostery/adblocker-puppeteer)
 - 🔒 Turnstile protection handling
-- ⚡ TypeScript support
+- 💾 Built-in LRU cache mechanism (5-minute TTL by default)
+- 🔐 Concurrency control (maximum 5 concurrent pages)
+- 🐳 Full Docker support
+- ⚡ Written in TypeScript with type safety
 
 ## Installation
 
@@ -114,6 +117,7 @@ curl "http://localhost:3000?url=https://example.com&waitUntil=networkidle2&timeo
 ```json
 {
   "success": true,
+  "fromCache": false,
   "data": ["<html>...</html>"]
 }
 ```
@@ -133,7 +137,8 @@ curl "http://localhost:3000?url=https://example.com&waitUntil=networkidle2&timeo
 .
 ├── src/
 │   ├── index.ts    # API server and routes
-│   └── lib.ts      # Core page content fetching logic
+│   ├── lib.ts      # Core page content fetching logic with semaphore
+│   └── cache.ts    # LRU cache implementation
 ├── Dockerfile      # Docker configuration
 ├── package.json    # Project dependencies
 ├── tsconfig.json   # TypeScript configuration
@@ -158,11 +163,13 @@ You can modify these settings in `src/lib.ts` by adjusting the `realBrowserOptio
 - **@hono/node-server**: Node.js adapter for Hono
 - **hono**: Fast, lightweight web framework
 - **puppeteer-real-browser**: Puppeteer wrapper for real browser automation
+- **@ghostery/adblocker-puppeteer**: Ad blocker for Puppeteer
+- **lru-cache**: LRU cache implementation
 
 ### Development Dependencies
 
 - **@types/node**: TypeScript definitions for Node.js
-- **tsx**: TypeScript execute for development
+- **tsx**: TypeScript executor for development
 - **typescript**: TypeScript compiler
 
 ## Technical Details
