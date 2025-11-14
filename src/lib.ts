@@ -19,16 +19,28 @@ const realBrowserOption: RealBrowserOption = {
   },
   plugins: [],
   // read proxy settings from environment variables if available
-  proxy:
-    process.env.PROXY_HOST && process.env.PROXY_PORT
-      ? {
-          host: process.env.PROXY_HOST,
-          port: parseInt(process.env.PROXY_PORT, 10),
-          username: process.env.PROXY_USERNAME,
-          password: process.env.PROXY_PASSWORD,
-        }
-      : undefined,
+  proxy: parseProxy(process.env.PROXY_URI),
 };
+
+function parseProxy(proxyString: string | undefined) {
+  if (!proxyString) {
+    console.log("No proxy string provided");
+    return;
+  }
+
+  try {
+    const url = new URL(proxyString);
+    return {
+      host: url.hostname,
+      port: Number(url.port),
+      username: url.username,
+      password: url.password,
+    };
+  } catch (error) {
+    console.error("Failed to parse proxy string:", error);
+    return;
+  }
+}
 
 let browserInstance: Browser | null = null;
 let blocker: PuppeteerBlocker | null = null;
