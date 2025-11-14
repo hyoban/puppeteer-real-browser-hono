@@ -1,40 +1,13 @@
-import { connect } from "puppeteer-real-browser";
+import {
+  connect,
+  type Options as RealBrowserOption,
+} from "puppeteer-real-browser";
 import type { GoToOptions } from "rebrowser-puppeteer-core";
 import type { Browser } from "rebrowser-puppeteer-core";
 import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
+import { pageSemaphore } from "./semaphore.js";
 
-class Semaphore {
-  private permits: number;
-  private queue: Array<() => void> = [];
-
-  constructor(permits: number) {
-    this.permits = permits;
-  }
-
-  async acquire(): Promise<void> {
-    if (this.permits > 0) {
-      this.permits--;
-      return Promise.resolve();
-    }
-
-    return new Promise<void>((resolve) => {
-      this.queue.push(resolve);
-    });
-  }
-
-  release(): void {
-    if (this.queue.length > 0) {
-      const resolve = this.queue.shift()!;
-      resolve();
-    } else {
-      this.permits++;
-    }
-  }
-}
-
-const pageSemaphore = new Semaphore(5);
-
-const realBrowserOption = {
+const realBrowserOption: RealBrowserOption = {
   args: ["--start-maximized"],
   turnstile: true,
   headless: false,
@@ -45,6 +18,16 @@ const realBrowserOption = {
     defaultViewport: null,
   },
   plugins: [],
+  // read proxy settings from environment variables if available
+  proxy:
+    process.env.PROXY_HOST && process.env.PROXY_PORT
+      ? {
+          host: process.env.PROXY_HOST,
+          port: parseInt(process.env.PROXY_PORT, 10),
+          username: process.env.PROXY_USERNAME,
+          password: process.env.PROXY_PASSWORD,
+        }
+      : undefined,
 };
 
 let browserInstance: Browser | null = null;
