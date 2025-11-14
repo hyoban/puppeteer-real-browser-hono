@@ -11,7 +11,10 @@ app.get("/", async (c) => {
     const { url, ...options } = queryParams;
 
     if (!url) {
-      return c.json({ error: "URL parameter is required" }, 400);
+      return c.json({
+        success: false,
+        error: "URL parameter is required",
+      });
     }
 
     let result = responseCache.get(url, options);
