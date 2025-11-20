@@ -2,9 +2,10 @@ import {
   connect,
   type Options as RealBrowserOption,
 } from "puppeteer-real-browser";
-import type { GoToOptions } from "rebrowser-puppeteer-core";
-import type { Browser } from "rebrowser-puppeteer-core";
+import type { GoToOptions, HTTPResponse } from "rebrowser-puppeteer-core";
+import type { Browser, Page } from "rebrowser-puppeteer-core";
 import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
+import { load } from "cheerio";
 import { pageSemaphore } from "./semaphore.js";
 
 const realBrowserOption: RealBrowserOption = {
@@ -24,7 +25,6 @@ const realBrowserOption: RealBrowserOption = {
 
 function parseProxy(proxyString: string | undefined) {
   if (!proxyString) {
-    console.log("No proxy string provided");
     return;
   }
 
@@ -62,12 +62,10 @@ async function getBrowser(): Promise<{
 
 export async function closeBrowser(): Promise<void> {
   if (browserInstance) {
-    console.log("Closing browser...");
     try {
       await browserInstance.close();
       browserInstance = null;
       blocker = null;
-      console.log("Browser closed successfully");
     } catch (error) {
       console.error("Error closing browser:", error);
     }
@@ -79,6 +77,79 @@ export type Options = {
   selector?: string;
 } & GoToOptions;
 
+async function tryGetHtmlFromResponse(
+  page: Page,
+  url: string,
+  selector: string | undefined,
+  timeout: number
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const responseHandler = async (response: HTTPResponse) => {
+      try {
+        const responseUrl = response.url();
+        const contentType = response.headers()["content-type"] || "";
+
+        if (responseUrl === url && contentType.includes("text/html")) {
+          const text = await response.text();
+
+          if (selector) {
+            const $ = load(text);
+            if ($(selector).length > 0) {
+              page.off("response", responseHandler);
+              resolve(text);
+            }
+          } else {
+            page.off("response", responseHandler);
+            resolve(text);
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing response for ${url}:`, error);
+      }
+    };
+
+    page.on("response", responseHandler);
+
+    setTimeout(() => {
+      page.off("response", responseHandler);
+      reject(new Error(`Timeout waiting for response from ${url}`));
+    }, timeout);
+  });
+}
+
+async function getHtmlFromPageContent(
+  page: Page,
+  url: string,
+  selector: string | undefined,
+  timeout: number
+): Promise<string> {
+  if (selector) {
+    const startDate = Date.now();
+    while (Date.now() - startDate < timeout) {
+      if (page.isClosed()) {
+        throw new Error(`Page closed unexpectedly while waiting for selector`);
+      }
+
+      const res = await page.$(selector);
+      if (res) {
+        break;
+      }
+
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    const res = await page.$(selector);
+    if (!res) {
+      throw new Error(
+        `Selector "${selector}" not found on ${url} within timeout`
+      );
+    }
+  }
+
+  const content = await page.content();
+  return content;
+}
+
 async function fetchSingleUrl(
   browser: Browser,
   blocker: PuppeteerBlocker,
@@ -86,44 +157,30 @@ async function fetchSingleUrl(
   selector: string | undefined,
   goToOptions: GoToOptions
 ): Promise<string> {
+  console.log(`Fetching URL: ${url}`);
   await pageSemaphore.acquire();
-  console.log(`Acquired lock for ${url}`);
 
-  let page;
+  let page: Page | undefined;
   try {
     page = await browser.newPage();
     await blocker.enableBlockingInPage(page as any);
 
-    await page.goto(url, goToOptions);
+    const timeout = goToOptions.timeout || 30000;
+    const currentPage = page;
 
-    let verified = false;
+    const responsePromise = tryGetHtmlFromResponse(
+      currentPage,
+      url,
+      selector,
+      timeout
+    );
 
-    if (selector) {
-      const startDate = Date.now();
-      while (Date.now() - startDate < (goToOptions.timeout || 30000)) {
-        if (page.isClosed()) {
-          throw new Error(
-            `Page closed unexpectedly while waiting for selector`
-          );
-        }
+    const gotoPromise = currentPage.goto(url, goToOptions).then(async () => {
+      return await getHtmlFromPageContent(currentPage, url, selector, timeout);
+    });
 
-        const res = await page.$(selector);
-        if (res) {
-          verified = true;
-          break;
-        }
+    const content = await Promise.race([responsePromise, gotoPromise]);
 
-        await new Promise((r) => setTimeout(r, 1000));
-      }
-    }
-
-    if (selector && !verified) {
-      throw new Error(
-        `Selector "${selector}" not found on ${url} within timeout`
-      );
-    }
-
-    const content = await page.content();
     return content;
   } catch (error) {
     console.error(`Failed to fetch ${url}:`, error);
@@ -140,7 +197,6 @@ async function fetchSingleUrl(
     }
 
     pageSemaphore.release();
-    console.log(`Released lock for ${url}`);
   }
 }
 
