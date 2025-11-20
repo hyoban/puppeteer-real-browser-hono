@@ -16,10 +16,13 @@ FROM base AS builder
 
 WORKDIR /app
 
-COPY package*json tsconfig.json src ./
+COPY package*.json ./
 
-RUN npm ci && \
-    npm run build && \
+RUN npm ci
+
+COPY tsconfig.json src ./
+
+RUN npm run build && \
     npm prune --production
 
 FROM base AS runner
