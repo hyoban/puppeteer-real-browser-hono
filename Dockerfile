@@ -1,17 +1,5 @@
 FROM node:lts AS base
 
-FROM base AS builder
-
-WORKDIR /app
-
-COPY package*json tsconfig.json src ./
-
-RUN npm ci && \
-    npm run build && \
-    npm prune --production
-
-FROM base AS runner
-
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -23,6 +11,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 ENV CHROME_BIN=/usr/bin/chromium
+
+FROM base AS builder
+
+WORKDIR /app
+
+COPY package*json tsconfig.json src ./
+
+RUN npm ci && \
+    npm run build && \
+    npm prune --production
+
+FROM base AS runner
 
 WORKDIR /app
 
