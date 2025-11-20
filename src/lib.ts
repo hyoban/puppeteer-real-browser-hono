@@ -83,19 +83,24 @@ async function tryGetHtmlFromResponse(
   selector: string,
   timeout: number
 ) {
-  return new Promise<string | null>((resolve, reject) => {
+  return new Promise<string | null>((resolve) => {
     const responseHandler = async (response: HTTPResponse) => {
       try {
         const responseUrl = response.url();
         const contentType = response.headers()["content-type"] || "";
-        const resourceType = response.request().resourceType();
+        const request = response.request();
+        const resourceType = request.resourceType();
+        const method = request.method();
 
         if (
           responseUrl === url &&
           resourceType === "document" &&
           (contentType.includes("text/html") || !contentType)
         ) {
-          const text = await response.text();
+          const text = await response.text().catch(() => null);
+          if (!text) {
+            return;
+          }
 
           const $ = load(text);
           if ($(selector).length > 0) {
